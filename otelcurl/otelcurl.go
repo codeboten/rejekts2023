@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -23,7 +24,13 @@ import (
 func initTracer() (*sdktrace.TracerProvider, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	conn, err := grpc.DialContext(ctx, "localhost:4317",
+
+	otelEndpoint := "localhost:4317"
+	if endpoint, present := os.LookupEnv("OTEL_EXPORTER_OTLP_ENDPOINT"); present {
+		otelEndpoint = endpoint
+	}
+
+	conn, err := grpc.DialContext(ctx, otelEndpoint,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
 	)
