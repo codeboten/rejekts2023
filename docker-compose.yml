@@ -1,0 +1,131 @@
+version: "3.9"
+
+networks:
+  default:
+    name: roll
+    driver: bridge
+
+services:
+  otelcurl:
+    depends_on:
+      - rolldice
+      - otel-desktop-viewer
+      - otelcol
+    build:
+      context: ./otelcurl
+      dockerfile: ./Dockerfile
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=otelcol:4317
+      - OTEL_SERVICE_NAME=otelcurl
+    command: -endpoint http://rolldice:8080/rolldice -interval 5s
+  otelcurl2:
+    depends_on:
+      - rolldice-py
+      - otel-desktop-viewer
+      - otelcol
+    build:
+      context: ./otelcurl
+      dockerfile: ./Dockerfile
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=otelcol:4317
+      - OTEL_SERVICE_NAME=otelcurl
+    command: -endpoint http://rolldice-py:5000/rolldice -interval 5s
+  rolldice:
+    build:
+      context: ./go-app
+      dockerfile: ./Dockerfile
+    pid: "host"
+    ports:
+      - "8080:8080"
+    volumes:
+      - shared-data:/app
+      - /proc:/host/proc
+  rolldice-py:
+    build:
+      context: ./python-app
+      dockerfile: ./Dockerfile
+    pid: "host"
+    ports:
+      - "5000:5000"
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otelcol:4317
+  go-auto:
+    depends_on:
+      - rolldice
+      - otel-desktop-viewer
+      - otelcol
+    image: otel/autoinstrumentation-go
+    privileged: true
+    pid: "host"
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otelcol:4317
+      - OTEL_GO_AUTO_TARGET_EXE=/app/main
+      - OTEL_SERVICE_NAME=rolldice-py
+    volumes:
+      - shared-data:/app
+      - /proc:/host/proc
+  otel-desktop-viewer:
+    image: codeboten/collector-with-viewer
+    ports:
+      - "8000:8000"
+  jaeger:
+    image: jaegertracing/all-in-one:1.50
+    container_name: jaeger
+    command:
+      - "--memory.max-traces=8000"
+      - "--query.base-path=/jaeger/ui"
+      - "--prometheus.server-url=http://prometheus:9090"
+      - "--prometheus.query.normalize-calls=true"
+      - "--prometheus.query.normalize-duration=true"
+    deploy:
+      resources:
+        limits:
+          memory: 300M
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:16686:16686" # Jaeger UI
+      - "4317" # OTLP gRPC default port
+    environment:
+      - METRICS_STORAGE_TYPE=prometheus
+  prometheus:
+    image: quay.io/prometheus/prometheus:v2.47.0
+    container_name: prometheus
+    command:
+      - --web.console.templates=/etc/prometheus/consoles
+      - --web.console.libraries=/etc/prometheus/console_libraries
+      - --storage.tsdb.retention.time=1h
+      - --config.file=/etc/prometheus/prometheus-config.yaml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+      - --web.route-prefix=/
+      - --enable-feature=exemplar-storage
+      - --enable-feature=otlp-write-receiver
+    volumes:
+      - ./config/prometheus.yaml:/etc/prometheus/prometheus-config.yaml
+    deploy:
+      resources:
+        limits:
+          memory: 300M
+    ports:
+      - "9090:9090"
+  otelcol:
+    image: otel/opentelemetry-collector-contrib:0.86.0
+    container_name: otelcol
+    deploy:
+      resources:
+        limits:
+          memory: 125M
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol-config.yml"]
+    volumes:
+      - ./config/otelcol.yaml:/etc/otelcol-config.yml
+    ports:
+      - "4317" # OTLP over gRPC receiver
+      - "4318" # OTLP over HTTP receiver
+      - "0.0.0.0:8888:8888"
+    depends_on:
+      - jaeger
+      - prometheus
+
+volumes:
+  shared-data:
