@@ -49,6 +49,7 @@ services:
       - "5000:5000"
     environment:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otelcol:4317
+      - OTEL_METRIC_EXPORT_INTERVAL=5000
   go-auto:
     depends_on:
       - rolldice
@@ -107,7 +108,7 @@ services:
         limits:
           memory: 300M
     ports:
-      - "9090:9090"
+      - "0.0.0.0:9090:9090"
   otelcol:
     image: otel/opentelemetry-collector-contrib:0.86.0
     container_name: otelcol
