@@ -50,6 +50,7 @@ services:
     environment:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otelcol:4317
       - OTEL_METRIC_EXPORT_INTERVAL=5000
+      - OTEL_SERVICE_NAME=rolldice-py
   go-auto:
     depends_on:
       - rolldice
@@ -61,7 +62,7 @@ services:
     environment:
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otelcol:4317
       - OTEL_GO_AUTO_TARGET_EXE=/app/main
-      - OTEL_SERVICE_NAME=rolldice-py
+      - OTEL_SERVICE_NAME=rolldice-go
     volumes:
       - shared-data:/app
       - /proc:/host/proc
